@@ -39,7 +39,13 @@ func NewKubeProvider(
 	go typeConverter.Run(ctx)
 
 	reconciler := newReconciler(mgr.GetClient(), compiler, polexLister, polexEnabled)
-	builder := ctrl.NewControllerManagedBy(mgr).For(&policiesv1alpha1.MutatingPolicy{})
+
+	// Cluster-scoped MutatingPolicy controller
+	mpolBuilder := ctrl.NewControllerManagedBy(mgr).For(&policiesv1alpha1.MutatingPolicy{})
+
+	// Namespaced MutatingPolicy controller
+	nmpolBuilder := ctrl.NewControllerManagedBy(mgr).For(&policiesv1alpha1.NamespacedMutatingPolicy{})
+
 	if polexEnabled {
 		polexHandler := &handler.Funcs{
 			CreateFunc: func(
@@ -49,9 +55,14 @@ func NewKubeProvider(
 			) {
 				polex := tce.Object.(*policiesv1alpha1.PolicyException)
 				for _, ref := range polex.Spec.PolicyRefs {
+					namespace := ""
+					if ref.Kind == "NamespacedMutatingPolicy" {
+						namespace = polex.GetNamespace()
+					}
 					trli.Add(reconcile.Request{
 						NamespacedName: client.ObjectKey{
-							Name: ref.Name,
+							Name:      ref.Name,
+							Namespace: namespace,
 						},
 					})
 				}
@@ -63,9 +74,14 @@ func NewKubeProvider(
 			) {
 				polex := tce.ObjectNew.(*policiesv1alpha1.PolicyException)
 				for _, ref := range polex.Spec.PolicyRefs {
+					namespace := ""
+					if ref.Kind == "NamespacedMutatingPolicy" {
+						namespace = polex.GetNamespace()
+					}
 					trli.Add(reconcile.Request{
 						NamespacedName: client.ObjectKey{
-							Name: ref.Name,
+							Name:      ref.Name,
+							Namespace: namespace,
 						},
 					})
 				}
@@ -77,18 +93,29 @@ func NewKubeProvider(
 			) {
 				polex := tde.Object.(*policiesv1alpha1.PolicyException)
 				for _, ref := range polex.Spec.PolicyRefs {
+					namespace := ""
+					if ref.Kind == "NamespacedMutatingPolicy" {
+						namespace = polex.GetNamespace()
+					}
 					trli.Add(reconcile.Request{
 						NamespacedName: client.ObjectKey{
-							Name: ref.Name,
+							Name:      ref.Name,
+							Namespace: namespace,
 						},
 					})
 				}
 			},
 		}
-		builder.Watches(&policiesv1alpha1.PolicyException{}, polexHandler)
+		mpolBuilder = mpolBuilder.Watches(&policiesv1alpha1.PolicyException{}, polexHandler)
+		nmpolBuilder = nmpolBuilder.Watches(&policiesv1alpha1.PolicyException{}, polexHandler)
 	}
-	if err := builder.Complete(reconciler); err != nil {
+
+	if err := mpolBuilder.Complete(reconciler); err != nil {
 		return nil, typeConverter, fmt.Errorf("failed to construct mutatingpolicies manager: %w", err)
+	}
+
+	if err := nmpolBuilder.Complete(reconciler); err != nil {
+		return nil, typeConverter, fmt.Errorf("failed to construct namespacedmutatingpolicies manager: %w", err)
 	}
 
 	return reconciler, typeConverter, nil
@@ -134,7 +161,7 @@ func (r *staticProvider) MatchesMutateExisting(ctx context.Context, attr admissi
 
 func NewProvider(
 	compiler compiler.Compiler,
-	policies []v1alpha1.MutatingPolicy,
+	policies []v1alpha1.MutatingPolicyLike,
 	exceptions []*v1alpha1.PolicyException,
 ) (Provider, error) {
 	out := make([]Policy, 0, len(policies))
@@ -147,26 +174,41 @@ func NewProvider(
 				}
 			}
 		}
-		compiled, errs := compiler.Compile(&policy, matchedExceptions)
+		compiled, errs := compiler.Compile(policy, matchedExceptions)
 		if len(errs) > 0 {
 			return nil, fmt.Errorf("failed to compile policy %s (%w)", policy.GetName(), errs.ToAggregate())
 		}
 		out = append(out, Policy{
-			Policy:         &policy,
+			Policy:         policy,
 			CompiledPolicy: compiled,
 		})
-		generated, err := autogen.Autogen(&policy)
+		generated, err := autogen.Autogen(policy)
 		if err != nil {
 			return nil, err
 		}
-		for _, autogen := range generated {
-			policy.Spec = *autogen.Spec
-			compiled, errs := compiler.Compile(&policy, matchedExceptions)
+		for _, autogenSpec := range generated {
+			// Create a deep copy and update its spec
+			var autogenPolicy v1alpha1.MutatingPolicyLike
+			switch typed := policy.(type) {
+			case *v1alpha1.MutatingPolicy:
+				copy := typed.DeepCopy()
+				copy.Spec = *autogenSpec.Spec
+				autogenPolicy = copy
+			case *v1alpha1.NamespacedMutatingPolicy:
+				copy := typed.DeepCopy()
+				copy.Spec = *autogenSpec.Spec
+				autogenPolicy = copy
+			default:
+				// For interface types passed by value, create appropriate copy
+				autogenPolicy = policy
+			}
+
+			compiled, errs := compiler.Compile(autogenPolicy, matchedExceptions)
 			if len(errs) > 0 {
 				return nil, fmt.Errorf("failed to compile policy %s (%w)", policy.GetName(), errs.ToAggregate())
 			}
 			out = append(out, Policy{
-				Policy:         &policy,
+				Policy:         autogenPolicy,
 				CompiledPolicy: compiled,
 			})
 		}

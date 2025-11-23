@@ -67,6 +67,18 @@ func UnmarshalPolicy(kind string, raw []byte) (api.GenericPolicy, error) {
 			return nil, err
 		}
 		return api.NewNamespacedDeletingPolicy(policy), nil
+	case "MutatingPolicy":
+		var policy *v1alpha1.MutatingPolicy
+		if err := json.Unmarshal(raw, &policy); err != nil {
+			return nil, err
+		}
+		return api.NewMutatingPolicy(policy), nil
+	case "NamespacedMutatingPolicy":
+		var policy *v1alpha1.NamespacedMutatingPolicy
+		if err := json.Unmarshal(raw, &policy); err != nil {
+			return nil, err
+		}
+		return api.NewNamespacedMutatingPolicy(policy), nil
 	}
 	return nil, fmt.Errorf("admission request does not contain a policy")
 }

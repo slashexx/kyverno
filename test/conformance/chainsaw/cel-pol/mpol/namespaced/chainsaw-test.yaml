@@ -1,0 +1,39 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespaced-mutating-policy-basic
+spec:
+  description: Test basic NamespacedMutatingPolicy functionality
+  steps:
+  - name: create namespace
+    try:
+    - apply:
+        file: namespace.yaml
+    - assert:
+        file: namespace.yaml
+  
+  - name: create namespaced mutating policy
+    try:
+    - apply:
+        file: policy.yaml
+    - assert:
+        file: policy.yaml
+  
+  - name: wait for policy to be ready
+    try:
+    - sleep:
+        duration: 5s
+  
+  - name: create pod that should be mutated
+    try:
+    - apply:
+        file: pod.yaml
+    - assert:
+        file: pod-assert.yaml
+  
+  - name: verify mutation was applied
+    try:
+    - script:
+        content: |
+          kubectl get pod test-pod -n test-nmpol -o jsonpath='{.metadata.labels.mutated-by-nmpol}' | grep -q "true"
+

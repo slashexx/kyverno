@@ -43,17 +43,35 @@ func newReconciler(
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var policy policiesv1alpha1.MutatingPolicy
-	err := r.client.Get(ctx, req.NamespacedName, &policy)
-	if errors.IsNotFound(err) {
+	// Try cluster-scoped MutatingPolicy first
+	var mpolPolicy policiesv1alpha1.MutatingPolicy
+	errMpol := r.client.Get(ctx, client.ObjectKey{Name: req.Name}, &mpolPolicy)
+	if errMpol == nil {
+		return r.reconcilePolicy(&mpolPolicy, ctx, req)
+	}
+
+	// Try namespaced NamespacedMutatingPolicy
+	var nmpolPolicy policiesv1alpha1.NamespacedMutatingPolicy
+	errNmpol := r.client.Get(ctx, req.NamespacedName, &nmpolPolicy)
+	if errNmpol == nil {
+		return r.reconcilePolicy(&nmpolPolicy, ctx, req)
+	}
+
+	// Both failed, check if it's a deletion
+	if errors.IsNotFound(errMpol) && errors.IsNotFound(errNmpol) {
 		r.lock.Lock()
 		delete(r.policies, req.NamespacedName.String())
 		r.lock.Unlock()
 		return ctrl.Result{}, nil
 	}
-	if err != nil {
-		return ctrl.Result{}, err
+
+	if !errors.IsNotFound(errNmpol) {
+		return ctrl.Result{}, errNmpol
 	}
+	return ctrl.Result{}, errMpol
+}
+
+func (r *reconciler) reconcilePolicy(policy policiesv1alpha1.MutatingPolicyLike, ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	if policy.GetStatus().Generated {
 		r.lock.Lock()
 		delete(r.policies, req.NamespacedName.String())
@@ -62,33 +80,49 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	var exceptions []*policiesv1alpha1.PolicyException
+	var err error
 	if r.polexEnabled {
 		exceptions, err = engine.ListExceptions(r.polexLister, policy.GetKind(), policy.GetName())
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-	compiled, errs := r.compiler.Compile(&policy, exceptions)
+
+	compiled, errs := r.compiler.Compile(policy, exceptions)
 	if len(errs) > 0 {
 		return ctrl.Result{}, errs[0]
 	}
+
 	policies := []Policy{{
-		Policy:         &policy,
+		Policy:         policy,
 		CompiledPolicy: compiled,
 	}}
 
-	generated, err := autogen.Autogen(&policy)
+	generated, err := autogen.Autogen(policy)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	for _, autogen := range generated {
-		policy.Spec = *autogen.Spec
-		compiled, errs := r.compiler.Compile(&policy, exceptions)
+
+	for _, autogenSpec := range generated {
+		// Create a deep copy of the policy and update its spec
+		var autogenPolicy policiesv1alpha1.MutatingPolicyLike
+		switch typed := policy.(type) {
+		case *policiesv1alpha1.MutatingPolicy:
+			copy := typed.DeepCopy()
+			copy.Spec = *autogenSpec.Spec
+			autogenPolicy = copy
+		case *policiesv1alpha1.NamespacedMutatingPolicy:
+			copy := typed.DeepCopy()
+			copy.Spec = *autogenSpec.Spec
+			autogenPolicy = copy
+		}
+
+		compiled, errs := r.compiler.Compile(autogenPolicy, exceptions)
 		if len(errs) > 0 {
 			return ctrl.Result{}, errs[0]
 		}
 		policies = append(policies, Policy{
-			Policy:         &policy,
+			Policy:         autogenPolicy,
 			CompiledPolicy: compiled,
 		})
 	}

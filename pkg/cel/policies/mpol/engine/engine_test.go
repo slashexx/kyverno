@@ -211,7 +211,7 @@ func (f *fakeTypeConverter) GetTypeConverter(gvk schema.GroupVersionKind) manage
 
 func TestEvaluate(t *testing.T) {
 	t.Run("no policies and no exceptions returns empty response without error", func(t *testing.T) {
-		pols := []policiesv1alpha1.MutatingPolicy{}
+		pols := []policiesv1alpha1.MutatingPolicyLike{}
 		polexs := []*policiesv1alpha1.PolicyException{}
 
 		provider, err := NewProvider(compiler.NewCompiler(), pols, polexs)
@@ -269,7 +269,7 @@ func TestEvaluate(t *testing.T) {
 			},
 		}
 
-		pols := []policiesv1alpha1.MutatingPolicy{mpol}
+		pols := []policiesv1alpha1.MutatingPolicyLike{&mpol}
 
 		provider, err := NewProvider(compiler.NewCompiler(), pols, nil)
 
@@ -381,10 +381,16 @@ func TestHandle(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Convert to interface slice
+			pols := make([]policiesv1alpha1.MutatingPolicyLike, len(tc.policies))
+			for i := range tc.policies {
+				pols[i] = &tc.policies[i]
+			}
+
 			// Compile policies
 			provider, err := NewProvider(
 				compiler.NewCompiler(),
-				tc.policies,
+				pols,
 				nil,
 			)
 			assert.NoError(t, err)
@@ -462,7 +468,7 @@ func TestMatchedMutateExistingPolicies(t *testing.T) {
 			},
 		}
 
-		pols := []policiesv1alpha1.MutatingPolicy{}
+		pols := []policiesv1alpha1.MutatingPolicyLike{}
 		polexs := []*policiesv1alpha1.PolicyException{}
 
 		provider, _ := NewProvider(compiler.NewCompiler(), pols, polexs)
@@ -490,7 +496,7 @@ func TestMatchedMutateExistingPolicies(t *testing.T) {
 			},
 		}
 
-		pols := []policiesv1alpha1.MutatingPolicy{}
+		pols := []policiesv1alpha1.MutatingPolicyLike{}
 		polexs := []*policiesv1alpha1.PolicyException{}
 		provider, _ := NewProvider(compiler.NewCompiler(), pols, polexs)
 

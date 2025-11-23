@@ -116,6 +116,8 @@ type GenericPolicy interface {
 	AsMutatingAdmissionPolicy() *MutatingAdmissionPolicyData
 	// AsMutatingPolicy returns the mutating policy
 	AsMutatingPolicy() *policiesv1alpha1.MutatingPolicy
+	// AsNamespacedMutatingPolicy returns the namespaced mutating policy
+	AsNamespacedMutatingPolicy() *policiesv1alpha1.NamespacedMutatingPolicy
 	// AsGeneratingPolicy returns the generating policy
 	AsGeneratingPolicy() *policiesv1alpha1.GeneratingPolicy
 	// AsDeletingPolicy returns the deleting policy

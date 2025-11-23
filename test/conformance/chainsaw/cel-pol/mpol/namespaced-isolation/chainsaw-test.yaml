@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespaced-mutating-policy-isolation
+spec:
+  description: Test that NamespacedMutatingPolicy only affects resources in its namespace
+  steps:
+  - name: create namespaces
+    try:
+    - apply:
+        file: namespaces.yaml
+    - assert:
+        file: namespaces.yaml
+  
+  - name: create namespaced mutating policy in ns-a
+    try:
+    - apply:
+        file: policy-ns-a.yaml
+    - assert:
+        file: policy-ns-a.yaml
+  
+  - name: wait for policy to be ready
+    try:
+    - sleep:
+        duration: 5s
+  
+  - name: create pod in ns-a (should be mutated)
+    try:
+    - apply:
+        file: pod-ns-a.yaml
+    - assert:
+        file: pod-ns-a-assert.yaml
+  
+  - name: create pod in ns-b (should NOT be mutated)
+    try:
+    - apply:
+        file: pod-ns-b.yaml
+    - assert:
+        file: pod-ns-b-assert.yaml
+  
+  - name: verify ns-a pod was mutated
+    try:
+    - script:
+        content: |
+          kubectl get pod test-pod -n nmpol-test-a -o jsonpath='{.metadata.labels.mutated}' | grep -q "true"
+  
+  - name: verify ns-b pod was NOT mutated
+    try:
+    - script:
+        content: |
+          ! kubectl get pod test-pod -n nmpol-test-b -o jsonpath='{.metadata.labels.mutated}' | grep -q "true"
+

@@ -238,7 +238,7 @@ func (s *scanner) ScanResource(
 	for i, policy := range mpols {
 		if pol := policy.AsMutatingPolicy(); pol != nil {
 			compiler := mpolcompiler.NewCompiler()
-			provider, err := mpolengine.NewProvider(compiler, []policiesv1alpha1.MutatingPolicy{*pol}, exceptions)
+			provider, err := mpolengine.NewProvider(compiler, []policiesv1alpha1.MutatingPolicyLike{pol}, exceptions)
 			if err != nil {
 				logger.Error(err, "failed to create policy provider")
 				results[&mpols[i]] = ScanResult{nil, err}

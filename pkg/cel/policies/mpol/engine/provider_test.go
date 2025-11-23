@@ -65,7 +65,11 @@ func TestNewProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prov, err := NewProvider(compiler.NewCompiler(), tt.pols, tt.exceptions)
+			pols := make([]policiesv1alpha1.MutatingPolicyLike, len(tt.pols))
+			for i := range tt.pols {
+				pols[i] = &tt.pols[i]
+			}
+			prov, err := NewProvider(compiler.NewCompiler(), pols, tt.exceptions)
 			if tt.expectErr {
 				assert.Error(t, err)
 				assert.Nil(t, prov)

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+  namespace: test-nmpol
+  labels:
+    mutated-by-nmpol: "true"
+    policy-namespace: "test-nmpol"
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.14.2
+

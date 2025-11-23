@@ -1,12 +1,12 @@
 package mpol
 
 import (
-	"github.com/kyverno/kyverno/api/policies.kyverno.io/v1alpha1"
+	policiesv1alpha1 "github.com/kyverno/kyverno/api/policies.kyverno.io/v1alpha1"
 	"github.com/kyverno/kyverno/pkg/cel/policies/mpol/compiler"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-func Validate(mpol *v1alpha1.MutatingPolicy) ([]string, error) {
+func Validate(mpol policiesv1alpha1.MutatingPolicyLike) ([]string, error) {
 	warnings := make([]string, 0)
 	err := make(field.ErrorList, 0)
 
@@ -16,7 +16,8 @@ func Validate(mpol *v1alpha1.MutatingPolicy) ([]string, error) {
 		err = errList
 	}
 
-	if mpol.Spec.MatchConstraints == nil || len(mpol.Spec.MatchConstraints.ResourceRules) == 0 {
+	spec := mpol.GetMutatingPolicySpec()
+	if spec.MatchConstraints == nil || len(spec.MatchConstraints.ResourceRules) == 0 {
 		err = append(err, field.Required(field.NewPath("spec").Child("matchConstraints"), "a matchConstraints with at least one resource rule is required"))
 	}
 

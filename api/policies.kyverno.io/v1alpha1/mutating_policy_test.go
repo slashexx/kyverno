@@ -25,7 +25,7 @@ func TestGetMatchConstraints(t *testing.T) {
 		assert.Empty(t, result.ExcludeResourceRules, "ExcludeResourceRules should be empty")
 	})
 
-	t.Run("returns copied MatchConstraints", func(t *testing.T) {
+	t.Run("MutatingPolicy returns copied MatchConstraints", func(t *testing.T) {
 		mpAlpha := admissionregistrationv1alpha1.Equivalent
 		mp := admissionregistrationv1.MatchPolicyType(mpAlpha)
 
@@ -38,6 +38,39 @@ func TestGetMatchConstraints(t *testing.T) {
 		}
 
 		result := mpol.GetMatchConstraints()
+
+		assert.NotNil(t, result.MatchPolicy, "expected MatchPolicy %s, got %v", mp, result.MatchPolicy)
+		assert.Equal(t, *result.MatchPolicy, mp, "expected MatchPolicy %s, got %v", mp, result.MatchPolicy)
+	})
+
+	t.Run("NamespacedMutatingPolicy returns empty when MatchConstraints is nil", func(t *testing.T) {
+		nmpol := NamespacedMutatingPolicy{
+			Spec: MutatingPolicySpec{},
+		}
+
+		result := nmpol.GetMatchConstraints()
+
+		assert.Nil(t, result.NamespaceSelector, "NamespaceSelector should be nil")
+		assert.Nil(t, result.ObjectSelector, "ObjectSelector should be nil")
+		assert.Nil(t, result.MatchPolicy, "MatchPolicy should be nil")
+		assert.Empty(t, result.ResourceRules, "ResourceRules should be empty")
+		assert.Empty(t, result.ExcludeResourceRules, "ExcludeResourceRules should be empty")
+	})
+
+	t.Run("NamespacedMutatingPolicy returns copied MatchConstraints", func(t *testing.T) {
+		mpAlpha := admissionregistrationv1alpha1.Equivalent
+		mp := admissionregistrationv1.MatchPolicyType(mpAlpha)
+
+		nmpol := NamespacedMutatingPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+			Spec: MutatingPolicySpec{
+				MatchConstraints: &admissionregistrationv1alpha1.MatchResources{
+					MatchPolicy: &mpAlpha,
+				},
+			},
+		}
+
+		result := nmpol.GetMatchConstraints()
 
 		assert.NotNil(t, result.MatchPolicy, "expected MatchPolicy %s, got %v", mp, result.MatchPolicy)
 		assert.Equal(t, *result.MatchPolicy, mp, "expected MatchPolicy %s, got %v", mp, result.MatchPolicy)
@@ -102,7 +135,7 @@ func TestGenerateMutatingAdmissionPolicyEnabled(t *testing.T) {
 }
 
 func TestGetFailurePolicy(t *testing.T) {
-	t.Run("returns default Fail if  nil", func(t *testing.T) {
+	t.Run("MutatingPolicy returns default Fail if nil", func(t *testing.T) {
 		mpol := MutatingPolicy{
 			Spec: MutatingPolicySpec{},
 		}
@@ -110,7 +143,7 @@ func TestGetFailurePolicy(t *testing.T) {
 		assert.Equal(t, mpol.GetFailurePolicy(), admissionregistrationv1.Fail, "expected default failure policy 'Fail'")
 	})
 
-	t.Run("returns provided value", func(t *testing.T) {
+	t.Run("MutatingPolicy returns provided value", func(t *testing.T) {
 		val := admissionregistrationv1alpha1.Ignore
 		valAlpha := admissionregistrationv1.FailurePolicyType(val)
 		mpol := MutatingPolicy{
@@ -120,6 +153,28 @@ func TestGetFailurePolicy(t *testing.T) {
 		}
 
 		assert.Equal(t, mpol.GetFailurePolicy(), valAlpha, "expected %s, got %s", val, mpol.GetFailurePolicy())
+	})
+
+	t.Run("NamespacedMutatingPolicy returns default Fail if nil", func(t *testing.T) {
+		nmpol := NamespacedMutatingPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+			Spec:       MutatingPolicySpec{},
+		}
+
+		assert.Equal(t, nmpol.GetFailurePolicy(), admissionregistrationv1.Fail, "expected default failure policy 'Fail'")
+	})
+
+	t.Run("NamespacedMutatingPolicy returns provided value", func(t *testing.T) {
+		val := admissionregistrationv1alpha1.Ignore
+		valAlpha := admissionregistrationv1.FailurePolicyType(val)
+		nmpol := NamespacedMutatingPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+			Spec: MutatingPolicySpec{
+				FailurePolicy: (*admissionregistrationv1alpha1.FailurePolicyType)(&valAlpha),
+			},
+		}
+
+		assert.Equal(t, nmpol.GetFailurePolicy(), valAlpha, "expected %s, got %s", val, nmpol.GetFailurePolicy())
 	})
 }
 
@@ -297,6 +352,16 @@ func TestMutatingPolicy_Getters(t *testing.T) {
 		policy := MutatingPolicy{}
 		result := policy.GetKind()
 		expected := "MutatingPolicy"
+
+		assert.Equal(t, expected, result, "expected kind %q, got %q", expected, result)
+	})
+
+	t.Run("NamespacedMutatingPolicy GetKind returns 'NamespacedMutatingPolicy'", func(t *testing.T) {
+		policy := NamespacedMutatingPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+		}
+		result := policy.GetKind()
+		expected := "NamespacedMutatingPolicy"
 
 		assert.Equal(t, expected, result, "expected kind %q, got %q", expected, result)
 	})
